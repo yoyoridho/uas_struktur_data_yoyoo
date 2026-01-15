@@ -1,5 +1,4 @@
 
-
 from __future__ import annotations
 
 import base64
@@ -15,7 +14,15 @@ from sklearn.model_selection import train_test_split
 from sklearn.tree import DecisionTreeClassifier, export_text, plot_tree
 from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
 
-import matplotlib.pyplot as plt
+def _optional_matplotlib():
+    """Import matplotlib lazily. Return (plt, error_message_or_None)."""
+    try:
+        import matplotlib.pyplot as plt  # type: ignore
+        return plt, None
+    except Exception as e:
+        return None, str(e)
+
+
 
 
 DATA_CSV = r"""\
@@ -143,14 +150,11 @@ Demam,Batuk,SesakNapas,SakitTenggorokan,Kelelahan,Anosmia,Diare,KontakErat,Satur
 
 """
 
-# Model pickle (opsional) - embedded base64
 MODEL_PKL_B64 = "gASVLgIAAAAAAACMFXNrbGVhcm4udHJlZS5fY2xhc3Nlc5SMFkRlY2lzaW9uVHJlZUNsYXNzaWZpZXKUk5QpgZR9lCiMCWNyaXRlcmlvbpSMBGdpbmmUjAhzcGxpdHRlcpSMBGJlc3SUjAltYXhfZGVwdGiUSwSMEW1pbl9zYW1wbGVzX3NwbGl0lEsCjBBtaW5fc2FtcGxlc19sZWFmlEsBjBhtaW5fd2VpZ2h0X2ZyYWN0aW9uX2xlYWaURwAAAAAAAAAAjAxtYXhfZmVhdHVyZXOUTowObWF4X2xlYWZfbm9kZXOUTowMcmFuZG9tX3N0YXRllEsqjBVtaW5faW1wdXJpdHlfZGVjcmVhc2WURwAAAAAAAAAAjAxjbGFzc193ZWlnaHSUjAhiYWxhbmNlZJSMCWNjcF9hbHBoYZRHAAAAAAAAAACMDW1vbm90b25pY19jc3SUTowRZmVhdHVyZV9uYW1lc19pbl+UjBNqb2JsaWIubnVtcHlfcGlja2xllIwRTnVtcHlBcnJheVdyYXBwZXKUk5QpgZR9lCiMCHN1YmNsYXNzlIwFbnVtcHmUjAduZGFycmF5lJOUjAVzaGFwZZRLCYWUjAVvcmRlcpSMAUOUjAVkdHlwZZRoHGgjk5SMAk84lImIh5RSlChLA4wBfJROTk5K/////0r/////Sz90lGKMCmFsbG93X21tYXCUiYwbbnVtcHlfYXJyYXlfYWxpZ25tZW50X2J5dGVzlEsQdWKABZXxAAAAAAAAAIwVbnVtcHkuY29yZS5tdWx0aWFycmF5lIwMX3JlY29uc3RydWN0lJOUjAVudW1weZSMB25kYXJyYXmUk5RLAIWUQwFilIeUUpQoSwFLCYWUaAOMBWR0eXBllJOUjAJPOJSJiIeUUpQoSwOMAXyUTk5OSv////9K/////0s/dJRiiV2UKIwFRGVtYW2UjAVCYXR1a5SMClNlc2FrTmFwYXOUjBBTYWtpdFRlbmdnb3Jva2FulIwJS2VsZWxhaGFulIwHQW5vc21pYZSMBURpYXJllIwKS29udGFrRXJhdJSMClNhdHVyYXNpTzKUZXSUYi6VdAAAAAAAAACMDm5fZmVhdHVyZXNfaW5flEsJjApuX291dHB1dHNflEsBjAhjbGFzc2VzX5RoGCmBlH2UKGgbaB5oH0sChZRoIWgiaCNoJIwCaTiUiYiHlFKUKEsDjAE8lE5OTkr/////Sv////9LAHSUYmgqiGgrSxB1Yg3/////////////////AAAAAAAAAAABAAAAAAAAAJWeAAAAAAAAAIwKbl9jbGFzc2VzX5SMFW51bXB5LmNvcmUubXVsdGlhcnJheZSMBnNjYWxhcpSTlGg0QwgCAAAAAAAAAJSGlFKUjA1tYXhfZmVhdHVyZXNflEsJjAV0cmVlX5SMEnNrbGVhcm4udHJlZS5fdHJlZZSMBFRyZWWUk5RLCWgYKYGUfZQoaBtoHmgfSwGFlGghaCJoI2g0aCqIaCtLEHViCP//////////AgAAAAAAAACViwEAAAAAAABLAYeUUpR9lChoCUsEjApub2RlX2NvdW50lEsRjAVub2Rlc5RoGCmBlH2UKGgbaB5oH0sRhZRoIWgiaCNoJIwDVjY0lImIh5RSlChLA2goTiiMCmxlZnRfY2hpbGSUjAtyaWdodF9jaGlsZJSMB2ZlYXR1cmWUjAl0aHJlc2hvbGSUjAhpbXB1cml0eZSMDm5fbm9kZV9zYW1wbGVzlIwXd2VpZ2h0ZWRfbl9ub2RlX3NhbXBsZXOUjBJtaXNzaW5nX2dvX3RvX2xlZnSUdJR9lChoUWgkjAJpOJSJiIeUUpQoSwNoNU5OTkr/////Sv////9LAHSUYksAhpRoUmhdSwiGlGhTaF1LEIaUaFRoJIwCZjiUiYiHlFKUKEsDaDVOTk5K/////0r/////SwB0lGJLGIaUaFVoZEsghpRoVmhdSyiGlGhXaGRLMIaUaFhoJIwCdTGUiYiHlFKUKEsDaChOTk5K/////0r/////SwB0lGJLOIaUdUtASwFLEHSUYmgqiGgrSxB1YgP///8BAAAAAAAAAAQAAAAAAAAABwAAAAAAAAAAAAAAAADgP+z//////98/WgAAAAAAAAD1/////39WQAAAAAAAAAAAAgAAAAAAAAADAAAAAAAAAAgAAAAAAAAAAAAAAAAgVkA8MOOSE4vFPysAAAAAAAAA5yOinpeJPEAAAAAAAAAAAP/////////////////////+/////////wAAAAAAAADAAAAAAAAAAAABAAAAAAAAAC0tLS0tLQVAAAAAAAAAAAD//////////////////////v////////8AAAAAAAAAwAAAAAAAAAAAKgAAAAAAAABBfvz48eM5QAAAAAAAAAAABQAAAAAAAAAMAAAAAAAAAAUAAAAAAAAAAAAAAAAA4D/wRUE3b2zbPy8AAAAAAAAADu6uMDS7TkABAAAAAAAAAAYAAAAAAAAACQAAAAAAAAADAAAAAAAAAAAAAAAAAOA/2EQNB9fx3z8iAAAAAAAAAAYbRZlBkkBAAQAAAAAAAAAHAAAAAAAAAAgAAAAAAAAACAAAAAAAAAAAAAAAAGBXQFQkuhLCTs4/HAAAAAAAAAD0P9oOeEozQAAAAAAAAAAA//////////////////////7/////////AAAAAAAAAMA8sZaYYZzTPwIAAAAAAAAAFPzKaKQbCkAAAAAAAAAAAP/////////////////////+/////////wAAAAAAAADAAAAAAAAAwDwaAAAAAAAAAHHgwIEDBzBAAAAAAAAAAAAKAAAAAAAAAAsAAAAAAAAAAAAAAAAAAAAAAAAAAADgP+iwuhR2xbU/BgAAAAAAAAAx7F9HFrQrQAAAAAAAAAAA//////////////////////7/////////AAAAAAAAAMDcVF+KL+rHPwMAAAAAAAAAoBT8ymikF0AAAAAAAAAAAP/////////////////////+/////////wAAAAAAAADAAAAAAAAAsLwDAAAAAAAAAMTDw8PDwx9AAAAAAAAAAAANAAAAAAAAABAAAAAAAAAAAQAAAAAAAAAAAAAAAADgP7DCNHAzQL8/DQAAAAAAAAARptMu5VE8QAAAAAAAAAAADgAAAAAAAAAPAAAAAAAAAAAAAAAAAAAAAAAAAAAA4D/G3DsV9Y7YPwUAAAAAAAAAiOOZBuCSHEAAAAAAAAAAAP/////////////////////+/////////wAAAAAAAADAAAAAAAAAAAACAAAAAAAAAJ47d+7cufM/AAAAAAAAAAD//////////////////////v////////8AAAAAAAAAwNxUX4ov6sc/AwAAAAAAAACgFPzKaKQXQAAAAAAAAAAA//////////////////////7/////////AAAAAAAAAMAAAAAAAACwPAgAAAAAAAAALS0tLS0tNUAAAAAAAAAAAJUwAAAAAAAAAIwGdmFsdWVzlGgYKYGUfZQoaBtoHmgfSxFLAUsCh5RoIWgiaCNoZGgqiGgrSxB1Ygb///////8BAAAAAADgPwkAAAAAAOA/g2Rp1CEI7T/j27Rc8b63PwAAAAAAAAAAAAAAAAAA8D8AAAAAAADwPwAAAAAAAAAAXWA+vQXm0z/Tz2Ah/QzmP1i9PhBLquA/UoWC32mr3j++Ofrm6JvrPwUZF2RckME/2YIt2IItyD9Kn/RJn/TpPwAAAAAAAPA/AAAAAAAAAADvcRUQDMmmP+Ko/j5vk+4/TfBt/gqzuj/3QTKgnqnsPwAAAAAAAAAAAAAAAAAA8D9Oi/M9j7ewP5WOQRgO6e0/zAeyC4uR0D8a/CZ6OrfnPwAAAAAAAPA/AAAAAAAAAABN8G3+CrO6P/dBMqCeqew/AAAAAAAAAAAAAAAAAADwP5UgAAAAAAAAAHVijBBfc2tsZWFybl92ZXJzaW9ulIwFMS40LjKUdWIu"
 
 TARGET_COL = "LabelCOVID"
 
-# -----------------------------
-# Utilities
-# -----------------------------
+
 @dataclass
 class Artifacts:
     df: pd.DataFrame
@@ -164,7 +168,6 @@ class Artifacts:
 
 def load_dataset() -> pd.DataFrame:
     df = pd.read_csv(io.StringIO(DATA_CSV))
-    # pastikan kolom target ada
     if TARGET_COL not in df.columns:
         raise ValueError(f"Kolom target '{TARGET_COL}' tidak ditemukan di dataset.")
     return df
@@ -174,7 +177,6 @@ def _train_model(df: pd.DataFrame, seed: int = 42) -> Artifacts:
     features = [c for c in df.columns if c != TARGET_COL]
     X = df[features].copy()
 
-    # Pastikan semua numerik
     for c in features:
         X[c] = pd.to_numeric(X[c], errors="coerce").fillna(0)
 
@@ -213,13 +215,10 @@ def _try_load_embedded_model():
 
 
 def get_model_and_features(df: pd.DataFrame):
-    # fitur diambil dari dataset agar konsisten
     features = [c for c in df.columns if c != TARGET_COL]
 
-    # 1) coba load model embedded (kalau kompatibel)
     model = _try_load_embedded_model()
 
-    # 2) train ulang untuk metrik/rules (dan fallback model)
     artifacts = _train_model(df, seed=42)
 
     if model is None:
@@ -229,6 +228,11 @@ def get_model_and_features(df: pd.DataFrame):
 
 
 def make_tree_figure(model: DecisionTreeClassifier, features: List[str]):
+    plt, err = _optional_matplotlib()
+    if plt is None:
+        raise ModuleNotFoundError(
+            'matplotlib belum terpasang. Install dulu: pip install matplotlib. ' + f'Detail: {err}'
+        )
     fig = plt.figure(figsize=(16, 8))
     plot_tree(
         model,
@@ -320,8 +324,11 @@ def run_streamlit():
         st.code(artifacts.rules)
 
     with st.expander("🌳 Diagram Decision Tree"):
-        fig = make_tree_figure(model, features)
-        st.pyplot(fig, clear_figure=True)
+        try:
+            fig = make_tree_figure(model, features)
+            st.pyplot(fig, clear_figure=True)
+        except ModuleNotFoundError as e:
+            st.warning("Diagram butuh matplotlib. Install/deploy dengan menambahkan `matplotlib` ke requirements.\n\nDetail: " + str(e))
 
 
 def main():
