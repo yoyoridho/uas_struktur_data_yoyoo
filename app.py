@@ -1,212 +1,58 @@
+# -*- coding: utf-8 -*-
+"""
+Streamlit App (Single File, Cloud-Ready)
+Deteksi Gejala COVID-19 menggunakan Decision Tree
+
+✅ Tidak butuh file CSV/PKL eksternal (semuanya sudah di-embed).
+✅ Aman untuk Streamlit Cloud (ada fallback kalau PKL tidak kompatibel).
+"""
 
 from __future__ import annotations
 
 import base64
+import gzip
 import io
 import pickle
-from dataclasses import dataclass
-from typing import List, Tuple, Dict
+from typing import Tuple, Dict
 
 import numpy as np
 import pandas as pd
+import streamlit as st
 
 from sklearn.model_selection import train_test_split
-from sklearn.tree import DecisionTreeClassifier, export_text, plot_tree
-from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
+from sklearn.tree import DecisionTreeClassifier, export_text
 
-def _optional_matplotlib():
-    """Import matplotlib lazily. Return (plt, error_message_or_None)."""
+# -----------------------------
+# DATA EMBED (CSV + PKL optional)
+# -----------------------------
+
+_EMBED_CSV_B64GZ = """H4sIADcVaWkC/4VWTU/rQAy897fswW6z2eTIe+WAiuAA4r5IEa9KP1Ab/j8h3W7GXpcnJEBTe9eeHY+77vZx7/7E4at3L9059k/xM57dS+y3w2t3+Pg4no59PLhNt+t28d/4393heN5vo1tv46lzm+NhiP39KQ5jzvB1iuft89I9xvdu9/f57WG9YMeO3OX3z09bO1pQAi8QuzaM4Bx5+TtG8uIakdP9lE6QnsBrTI5sBJjObKczjUh54hhZTekyNoMEHySQJdjkNuHMuihJdATpvmBJdUTIpwmS7t1D71eiR+ZZvdFUPC/mfi4fTG0SgNNFAYrP4CrzCQ8XgM980SqVxFgni3fn8t0VqJivLT5DikSe8plIc7sUfKaLWnh3oRC8iOdIlm1S5hMuqizNe4gkpK7QUpP5nFkdi2coiTGSZZuV6oj1GF5rTQJTxZskr0T6TeoARKITS2wNl2Jequ7Gc8DEyUgmsibWWy7AIp/1odBnXYhevQeVFgZgVXCX5lCPR9NatthYLHuhMLJmJrmAB+rJ4o4t6rPCgiWRAIRkha2EBwmvVGdWlrN4deYEcuGAjDOj+JSzDWuGbTGxJERGkhVJpfuzLEnxWVgtuj+QzKXoW2vzBVFneuJlZv5X2bAExTIuxNAWK4FxSzHOoXF7sKgL1uarLTGEYjZhHSIlTS1sUc274GmyBtLrtLFcwN+qibTCmgLMe4Yss/xv86ybp3lFs6WwG18lDFstBqmynOUn8hsysuReOwoAAA=="""
+_EMBED_PKL_B64GZ = """H4sIADcVaWkC/71Wa2wUVRTebbvdB23dAoVKiTxjKoSlQFGQym1tCZGJS4BaiIEMd2ennbHzYh5AjQ/A8KidgMJdlWgKMYb4SExVDBEFEcVXjJrURBQijY08FJAGiMYgeO50ZtndQqB/vD/2zD1zzj3fd865Z3ZdQSqW53OWXWa0SjzWlZip83yM5SRsGLxB7BENPCcaoqo0gr6easVmkdfJDnLPevIkqbTDnC6avA4WxC5oERWR2CFDk0QTlKBJ8IZJ7LCM17JJXjMFwhTYpbKosAaWNYk3WMeWMHl2NFMLWJoJ47fLqXINL7YIJtusY86EOP0v5/vcZRfRw5t5bFo6II7bJXRPbVhFTTqaIh0rSVVmDRObPGEm2WX0WFHWLMDeBsA4nccGn3mmkwA3MjBKYAkrHJ8EKhynsVjSBJxhXiyrimqqisixHPCN26UuHlbBMtCBaMQe9piakMRETLFkrY3VRA4yTuzSON3W6TpuW6pjTcvMbciwEg4QYgccL2IHlSSmtmBkBwwBa8AnvBGeVT1JE+6vh+ek2QZ6YbQwAazyFs4i7Vs2k8Wkksm3/U+QeDy+4Bos54dBJknYESxJ6hpWlrFG2u2KfoROHKAqtigyr5hsos2EbDJRK7EukOrzqJc5xjFO1fmYbEmm2A/PLmJ1nlMVw9QtznTQDmTA+DaSen+C9IPzUyJCvgf/9qC3r4A8BRp4GcsQ4kFIeiuxI0t4A7fGsYYhc9EluFU0G3mlpUXV1VYMfRpmeImXsECfg3WKasgiBu8GwA4ViTCqYuLWeTo26VG0jtgQF04nPMSLpUyPeYmS7jqnwEzYjiisapmaZRos7d6Qe41YIpT3l1SoEO4SxjB5QHScMF6YIEy088QskjU5JH0QVJi0RZhME198LXN57ed3ZarTgwY40qFvWqFCg4Oupu0mVNeH3EHgI5sACTR0xp1yqAXoYIDThmYPCvoL15xOB1rQcA5Rf5podZpEyMPvhUx1uAwYP00D9Q7DmIjQ68tyqqXAfCiF/nFuc06A0oxM5jfdW309lUJlvNKOSHyzyXKCKMHVHaI7c8TdBV160A6mACwFlWpD3lQgtL4OAncmEXtk/zjgk2zum6GyCINRaWFbVNZUWRqUmA7KRbkVFmYOrC/j20SExcIKJgRyCcgoyEbq2Xwrz3KwfERIMmNBNoFnJcilsK8CuYyeYE3LSsnAE2ZtIhZTC7cvmtlp+fDe66sCVwZ9masHnXWqeAI96mou0+3TTbWehVfffFeGMt3HNtXWVPVuH9ZxBE12VacmvNr5YntN2v9azrqa3feHcvt/irMCg/af5Mq6p6783dc7O+0fcGVRzt7jf2Fe3X2qdAxNdTUl59+uqv4wXuvhKXRlOCcPnv/RhuLgj30n0HjPvmLezrrttWn/YE7esvK3cmlt48T9Qw/Hv0WjXdUl9HPJ2gUzbpt/zTsvvIRf6UZenYZf+Vp4rSIyyPwdqhnlKlb1HFqfH6xK+0dcOcR3o9WDTnftH776yPvIy9O0s+z8EXsn33b8443ss1N//wJ5ed3tEBg5SPxdH3n+n31K15i0f7Erozl95uHvOlytzaj9GHl2pXu6Y78tut6/Ja684yb8Pz8+p+zy1qPI66stvTsLe7aPHnT/evXrnLPm/PEPLqL/OX81oaz7NzPtn6ryvkeFq7Fk3WB4w9TJ2+wN8GR6+BT2x/G7eQq78pmk+MO40DnUe2zv8r6D+1B2Pi+gbOnzrVg590DgZDfq/m7luH+LTqJlB+ZGmTd70OKNG06Ib/2CDs7+5+Tpl/9AgTtHJpc/9wn6acOUoxumfIkW7Lr00K5LZwac9+eqsmjRV3vQr69fnavuOI8eviBfjby3H/1VN3135xtnB+CJd1x8YNu+LpTaWldecuYc+ib47pCO579Ho67c/fj9+04NOP9W56XGuo9Wwo6y7neYXc3rhvPvOzAtVh2bTqxE7D9Tf5h52QsAAA=="""  # opsional, bisa gagal load jika versi sklearn beda
+
+
+def _decode_b64gz_to_bytes(b64gz_text: str) -> bytes:
+    if not b64gz_text.strip():
+        return b""
+    raw = base64.b64decode(b64gz_text.encode("ascii"))
+    return gzip.decompress(raw)
+
+
+def load_embedded_dataframe() -> pd.DataFrame:
+    csv_bytes = _decode_b64gz_to_bytes(_EMBED_CSV_B64GZ)
+    return pd.read_csv(io.BytesIO(csv_bytes))
+
+
+def try_load_embedded_model() -> DecisionTreeClassifier | None:
+    """
+    Coba load model PKL yang di-embed.
+    Jika tidak kompatibel (sering terjadi di Streamlit Cloud karena versi sklearn beda),
+    fungsi ini mengembalikan None dan kita akan train ulang dari CSV.
+    """
     try:
-        import matplotlib.pyplot as plt  # type: ignore
-        return plt, None
-    except Exception as e:
-        return None, str(e)
-
-
-
-
-DATA_CSV = r"""\
-Demam,Batuk,SesakNapas,SakitTenggorokan,Kelelahan,Anosmia,Diare,KontakErat,SaturasiO2,LabelCOVID
-1,1,0,1,1,0,0,0,96,0
-0,1,0,1,0,0,0,1,97,0
-1,1,0,1,1,1,0,1,96,1
-0,0,0,1,1,0,0,0,95,0
-0,0,0,1,0,0,0,0,95,0
-1,1,0,0,1,0,0,0,98,0
-1,1,0,0,1,1,0,1,99,1
-0,1,0,0,1,0,0,0,98,0
-0,0,1,0,0,0,0,1,94,0
-1,0,1,0,0,1,0,0,94,0
-1,0,0,0,1,0,0,1,94,0
-1,1,0,0,1,0,0,1,98,0
-0,1,0,0,0,0,0,1,96,0
-1,1,0,0,1,1,0,0,95,0
-0,0,0,0,1,0,0,1,95,0
-0,1,0,1,0,0,0,0,98,0
-1,1,0,0,0,0,0,0,96,0
-1,1,0,0,0,0,0,0,96,0
-0,1,0,0,1,1,0,1,95,1
-0,1,0,0,0,1,1,1,97,1
-1,1,0,1,1,0,0,1,98,1
-1,0,0,1,0,1,1,0,94,0
-0,0,0,1,0,1,0,0,97,0
-0,0,0,0,0,1,0,0,93,0
-0,0,1,1,1,0,0,0,97,0
-1,0,1,0,1,0,0,1,93,1
-0,1,1,0,1,1,0,1,91,1
-0,0,0,1,1,1,0,0,95,0
-0,0,0,1,1,1,0,0,95,0
-0,1,0,0,1,0,0,1,96,0
-0,0,0,0,1,0,0,1,97,0
-0,1,1,0,0,0,0,0,95,0
-0,0,1,0,1,0,0,0,92,0
-1,1,0,0,0,1,0,0,99,0
-1,0,0,0,0,0,0,1,94,0
-0,0,0,0,1,0,1,0,99,0
-1,1,1,0,1,0,0,1,90,1
-1,0,0,0,1,0,0,0,94,0
-1,1,0,1,1,1,0,1,95,1
-1,0,0,0,0,0,0,0,97,0
-0,1,0,0,0,0,0,1,98,0
-1,0,1,1,0,1,0,1,92,1
-0,0,0,0,1,1,0,1,98,0
-1,1,1,0,1,0,0,0,94,0
-1,0,0,0,0,0,1,1,97,0
-1,1,0,1,0,0,1,0,96,0
-1,0,0,0,1,0,0,0,96,0
-0,0,0,0,1,0,0,1,93,0
-1,1,0,1,0,1,0,0,99,0
-1,0,0,0,0,0,0,0,99,0
-1,0,1,1,0,0,0,1,90,1
-1,1,0,0,1,0,0,1,94,0
-1,0,0,0,0,0,0,1,97,0
-0,0,0,0,0,0,0,1,94,0
-0,0,0,0,1,0,0,1,96,0
-1,0,0,0,0,0,0,1,100,0
-1,1,0,0,1,0,0,1,95,0
-0,0,1,0,0,0,0,1,91,0
-1,0,0,0,0,1,0,1,96,0
-1,0,0,1,0,1,0,0,96,0
-0,0,1,1,1,0,0,1,92,1
-0,0,0,0,0,0,0,0,95,0
-0,0,0,0,0,0,0,0,94,0
-1,1,0,1,0,1,0,1,98,1
-0,1,1,0,1,1,0,1,89,1
-0,0,0,1,1,0,0,0,98,0
-1,0,0,0,0,0,0,0,95,0
-1,1,0,1,1,0,0,0,95,0
-0,1,0,0,1,1,1,1,95,1
-1,1,0,0,0,0,0,1,96,0
-1,0,0,0,1,0,0,1,97,0
-0,0,0,0,1,1,0,1,97,0
-1,0,0,0,1,0,0,0,97,0
-0,0,1,1,0,0,1,1,93,1
-0,1,0,0,0,0,0,1,98,0
-0,0,0,0,1,1,0,1,94,0
-0,0,0,0,0,1,0,0,95,0
-0,0,1,1,0,0,0,0,91,0
-1,1,0,0,0,0,0,1,97,0
-0,1,0,1,0,1,0,1,98,1
-1,1,0,0,0,1,0,1,96,1
-0,0,1,0,0,0,0,1,94,0
-0,0,0,1,0,0,0,1,96,0
-0,0,1,0,0,0,0,0,94,0
-0,0,0,1,0,0,0,0,98,0
-0,1,0,0,0,0,1,1,97,0
-0,1,0,0,1,0,0,1,97,0
-1,0,0,1,0,1,1,0,95,0
-0,1,0,1,1,1,0,1,97,1
-0,0,0,0,0,0,0,1,99,0
-1,1,0,0,1,0,0,0,97,0
-0,0,1,0,0,1,1,1,92,1
-0,1,0,1,1,0,0,0,98,0
-1,0,0,0,0,0,0,1,98,0
-1,0,0,0,1,1,0,1,96,1
-1,0,0,0,1,0,0,1,99,0
-0,0,0,1,0,1,0,1,98,0
-1,1,0,1,1,0,0,1,96,1
-0,1,0,1,1,0,0,0,97,0
-0,0,0,1,0,0,0,0,97,0
-0,1,0,1,0,0,0,0,96,0
-0,0,0,0,0,1,0,0,97,0
-1,0,0,0,0,1,0,0,96,0
-1,1,1,0,0,1,0,0,86,1
-0,0,0,0,1,0,0,1,95,0
-0,0,0,1,0,0,1,1,100,0
-0,1,0,0,0,0,0,0,98,0
-1,0,0,0,0,1,0,1,95,0
-0,0,0,0,0,1,0,0,97,0
-0,1,0,0,0,1,0,1,98,0
-0,1,0,0,0,1,0,0,92,0
-1,0,0,1,0,1,0,0,99,0
-1,1,0,1,0,0,0,0,96,0
-0,0,0,0,0,1,0,1,97,0
-1,0,0,0,0,0,1,0,94,0
-1,1,0,0,1,0,0,1,97,0
-0,1,0,1,0,0,0,0,98,0
-1,0,0,0,0,0,0,1,97,0
-1,1,0,0,0,0,0,1,94,0
-1,0,0,0,0,0,0,0,97,0
-
-"""
-
-MODEL_PKL_B64 = "gASVLgIAAAAAAACMFXNrbGVhcm4udHJlZS5fY2xhc3Nlc5SMFkRlY2lzaW9uVHJlZUNsYXNzaWZpZXKUk5QpgZR9lCiMCWNyaXRlcmlvbpSMBGdpbmmUjAhzcGxpdHRlcpSMBGJlc3SUjAltYXhfZGVwdGiUSwSMEW1pbl9zYW1wbGVzX3NwbGl0lEsCjBBtaW5fc2FtcGxlc19sZWFmlEsBjBhtaW5fd2VpZ2h0X2ZyYWN0aW9uX2xlYWaURwAAAAAAAAAAjAxtYXhfZmVhdHVyZXOUTowObWF4X2xlYWZfbm9kZXOUTowMcmFuZG9tX3N0YXRllEsqjBVtaW5faW1wdXJpdHlfZGVjcmVhc2WURwAAAAAAAAAAjAxjbGFzc193ZWlnaHSUjAhiYWxhbmNlZJSMCWNjcF9hbHBoYZRHAAAAAAAAAACMDW1vbm90b25pY19jc3SUTowRZmVhdHVyZV9uYW1lc19pbl+UjBNqb2JsaWIubnVtcHlfcGlja2xllIwRTnVtcHlBcnJheVdyYXBwZXKUk5QpgZR9lCiMCHN1YmNsYXNzlIwFbnVtcHmUjAduZGFycmF5lJOUjAVzaGFwZZRLCYWUjAVvcmRlcpSMAUOUjAVkdHlwZZRoHGgjk5SMAk84lImIh5RSlChLA4wBfJROTk5K/////0r/////Sz90lGKMCmFsbG93X21tYXCUiYwbbnVtcHlfYXJyYXlfYWxpZ25tZW50X2J5dGVzlEsQdWKABZXxAAAAAAAAAIwVbnVtcHkuY29yZS5tdWx0aWFycmF5lIwMX3JlY29uc3RydWN0lJOUjAVudW1weZSMB25kYXJyYXmUk5RLAIWUQwFilIeUUpQoSwFLCYWUaAOMBWR0eXBllJOUjAJPOJSJiIeUUpQoSwOMAXyUTk5OSv////9K/////0s/dJRiiV2UKIwFRGVtYW2UjAVCYXR1a5SMClNlc2FrTmFwYXOUjBBTYWtpdFRlbmdnb3Jva2FulIwJS2VsZWxhaGFulIwHQW5vc21pYZSMBURpYXJllIwKS29udGFrRXJhdJSMClNhdHVyYXNpTzKUZXSUYi6VdAAAAAAAAACMDm5fZmVhdHVyZXNfaW5flEsJjApuX291dHB1dHNflEsBjAhjbGFzc2VzX5RoGCmBlH2UKGgbaB5oH0sChZRoIWgiaCNoJIwCaTiUiYiHlFKUKEsDjAE8lE5OTkr/////Sv////9LAHSUYmgqiGgrSxB1Yg3/////////////////AAAAAAAAAAABAAAAAAAAAJWeAAAAAAAAAIwKbl9jbGFzc2VzX5SMFW51bXB5LmNvcmUubXVsdGlhcnJheZSMBnNjYWxhcpSTlGg0QwgCAAAAAAAAAJSGlFKUjA1tYXhfZmVhdHVyZXNflEsJjAV0cmVlX5SMEnNrbGVhcm4udHJlZS5fdHJlZZSMBFRyZWWUk5RLCWgYKYGUfZQoaBtoHmgfSwGFlGghaCJoI2g0aCqIaCtLEHViCP//////////AgAAAAAAAACViwEAAAAAAABLAYeUUpR9lChoCUsEjApub2RlX2NvdW50lEsRjAVub2Rlc5RoGCmBlH2UKGgbaB5oH0sRhZRoIWgiaCNoJIwDVjY0lImIh5RSlChLA2goTiiMCmxlZnRfY2hpbGSUjAtyaWdodF9jaGlsZJSMB2ZlYXR1cmWUjAl0aHJlc2hvbGSUjAhpbXB1cml0eZSMDm5fbm9kZV9zYW1wbGVzlIwXd2VpZ2h0ZWRfbl9ub2RlX3NhbXBsZXOUjBJtaXNzaW5nX2dvX3RvX2xlZnSUdJR9lChoUWgkjAJpOJSJiIeUUpQoSwNoNU5OTkr/////Sv////9LAHSUYksAhpRoUmhdSwiGlGhTaF1LEIaUaFRoJIwCZjiUiYiHlFKUKEsDaDVOTk5K/////0r/////SwB0lGJLGIaUaFVoZEsghpRoVmhdSyiGlGhXaGRLMIaUaFhoJIwCdTGUiYiHlFKUKEsDaChOTk5K/////0r/////SwB0lGJLOIaUdUtASwFLEHSUYmgqiGgrSxB1YgP///8BAAAAAAAAAAQAAAAAAAAABwAAAAAAAAAAAAAAAADgP+z//////98/WgAAAAAAAAD1/////39WQAAAAAAAAAAAAgAAAAAAAAADAAAAAAAAAAgAAAAAAAAAAAAAAAAgVkA8MOOSE4vFPysAAAAAAAAA5yOinpeJPEAAAAAAAAAAAP/////////////////////+/////////wAAAAAAAADAAAAAAAAAAAABAAAAAAAAAC0tLS0tLQVAAAAAAAAAAAD//////////////////////v////////8AAAAAAAAAwAAAAAAAAAAAKgAAAAAAAABBfvz48eM5QAAAAAAAAAAABQAAAAAAAAAMAAAAAAAAAAUAAAAAAAAAAAAAAAAA4D/wRUE3b2zbPy8AAAAAAAAADu6uMDS7TkABAAAAAAAAAAYAAAAAAAAACQAAAAAAAAADAAAAAAAAAAAAAAAAAOA/2EQNB9fx3z8iAAAAAAAAAAYbRZlBkkBAAQAAAAAAAAAHAAAAAAAAAAgAAAAAAAAACAAAAAAAAAAAAAAAAGBXQFQkuhLCTs4/HAAAAAAAAAD0P9oOeEozQAAAAAAAAAAA//////////////////////7/////////AAAAAAAAAMA8sZaYYZzTPwIAAAAAAAAAFPzKaKQbCkAAAAAAAAAAAP/////////////////////+/////////wAAAAAAAADAAAAAAAAAwDwaAAAAAAAAAHHgwIEDBzBAAAAAAAAAAAAKAAAAAAAAAAsAAAAAAAAAAAAAAAAAAAAAAAAAAADgP+iwuhR2xbU/BgAAAAAAAAAx7F9HFrQrQAAAAAAAAAAA//////////////////////7/////////AAAAAAAAAMDcVF+KL+rHPwMAAAAAAAAAoBT8ymikF0AAAAAAAAAAAP/////////////////////+/////////wAAAAAAAADAAAAAAAAAsLwDAAAAAAAAAMTDw8PDwx9AAAAAAAAAAAANAAAAAAAAABAAAAAAAAAAAQAAAAAAAAAAAAAAAADgP7DCNHAzQL8/DQAAAAAAAAARptMu5VE8QAAAAAAAAAAADgAAAAAAAAAPAAAAAAAAAAAAAAAAAAAAAAAAAAAA4D/G3DsV9Y7YPwUAAAAAAAAAiOOZBuCSHEAAAAAAAAAAAP/////////////////////+/////////wAAAAAAAADAAAAAAAAAAAACAAAAAAAAAJ47d+7cufM/AAAAAAAAAAD//////////////////////v////////8AAAAAAAAAwNxUX4ov6sc/AwAAAAAAAACgFPzKaKQXQAAAAAAAAAAA//////////////////////7/////////AAAAAAAAAMAAAAAAAACwPAgAAAAAAAAALS0tLS0tNUAAAAAAAAAAAJUwAAAAAAAAAIwGdmFsdWVzlGgYKYGUfZQoaBtoHmgfSxFLAUsCh5RoIWgiaCNoZGgqiGgrSxB1Ygb///////8BAAAAAADgPwkAAAAAAOA/g2Rp1CEI7T/j27Rc8b63PwAAAAAAAAAAAAAAAAAA8D8AAAAAAADwPwAAAAAAAAAAXWA+vQXm0z/Tz2Ah/QzmP1i9PhBLquA/UoWC32mr3j++Ofrm6JvrPwUZF2RckME/2YIt2IItyD9Kn/RJn/TpPwAAAAAAAPA/AAAAAAAAAADvcRUQDMmmP+Ko/j5vk+4/TfBt/gqzuj/3QTKgnqnsPwAAAAAAAAAAAAAAAAAA8D9Oi/M9j7ewP5WOQRgO6e0/zAeyC4uR0D8a/CZ6OrfnPwAAAAAAAPA/AAAAAAAAAABN8G3+CrO6P/dBMqCeqew/AAAAAAAAAAAAAAAAAADwP5UgAAAAAAAAAHVijBBfc2tsZWFybl92ZXJzaW9ulIwFMS40LjKUdWIu"
-
-TARGET_COL = "LabelCOVID"
-
-
-@dataclass
-class Artifacts:
-    df: pd.DataFrame
-    features: List[str]
-    model: DecisionTreeClassifier
-    accuracy: float
-    cm: np.ndarray
-    report: str
-    rules: str
-
-
-def load_dataset() -> pd.DataFrame:
-    df = pd.read_csv(io.StringIO(DATA_CSV))
-    if TARGET_COL not in df.columns:
-        raise ValueError(f"Kolom target '{TARGET_COL}' tidak ditemukan di dataset.")
-    return df
-
-
-def _train_model(df: pd.DataFrame, seed: int = 42) -> Artifacts:
-    features = [c for c in df.columns if c != TARGET_COL]
-    X = df[features].copy()
-
-    for c in features:
-        X[c] = pd.to_numeric(X[c], errors="coerce").fillna(0)
-
-    y = pd.to_numeric(df[TARGET_COL], errors="coerce").fillna(0).astype(int)
-
-    X_train, X_test, y_train, y_test = train_test_split(
-        X.values, y.values, test_size=0.25, random_state=seed, stratify=y.values
-    )
-
-    model = DecisionTreeClassifier(
-        criterion="gini",
-        max_depth=4,
-        min_samples_leaf=8,
-        random_state=seed,
-    )
-    model.fit(X_train, y_train)
-
-    y_pred = model.predict(X_test)
-    acc = float(accuracy_score(y_test, y_pred))
-    cm = confusion_matrix(y_test, y_pred)
-    report = classification_report(y_test, y_pred, digits=3)
-    rules = export_text(model, feature_names=features)
-
-    return Artifacts(df=df, features=features, model=model, accuracy=acc, cm=cm, report=report, rules=rules)
-
-
-def _try_load_embedded_model():
-    try:
-        raw = base64.b64decode(MODEL_PKL_B64.encode("ascii"))
-        obj = pickle.loads(raw)
+        pkl_bytes = _decode_b64gz_to_bytes(_EMBED_PKL_B64GZ)
+        if not pkl_bytes:
+            return None
+        obj = pickle.loads(pkl_bytes)
         if hasattr(obj, "predict") and hasattr(obj, "predict_proba"):
             return obj
         return None
@@ -214,133 +60,202 @@ def _try_load_embedded_model():
         return None
 
 
-def get_model_and_features(df: pd.DataFrame):
-    features = [c for c in df.columns if c != TARGET_COL]
+# -----------------------------
+# KONFIG APLIKASI
+# -----------------------------
 
-    model = _try_load_embedded_model()
+st.set_page_config(
+    page_title="Deteksi Gejala COVID-19 (Decision Tree)",
+    page_icon="🩺",
+    layout="wide",
+)
 
-    artifacts = _train_model(df, seed=42)
+st.title("🩺 Deteksi Gejala COVID-19 (Decision Tree)")
+st.caption("Aplikasi edukasi: hasil prediksi bukan diagnosis medis. Jika gejala berat, hubungi tenaga kesehatan.")
 
+menu = st.sidebar.radio("Navigasi", ["Deteksi", "Tentang"], index=0)
+
+# -----------------------------
+# TRAIN / LOAD MODEL (CACHE)
+# -----------------------------
+
+FEATURE_COLS = [
+    "Demam",
+    "Batuk",
+    "SesakNapas",
+    "SakitTenggorokan",
+    "Kelelahan",
+    "Anosmia",
+    "Diare",
+    "KontakErat",
+    "SaturasiO2",
+]
+TARGET_COL = "LabelCOVID"
+
+
+@st.cache_data(show_spinner=False)
+def get_dataset() -> pd.DataFrame:
+    df = load_embedded_dataframe()
+    missing_cols = [c for c in FEATURE_COLS + [TARGET_COL] if c not in df.columns]
+    if missing_cols:
+        raise ValueError(f"Kolom dataset tidak lengkap: {missing_cols}")
+    return df
+
+
+@st.cache_resource(show_spinner=False)
+def get_model_and_metrics() -> Tuple[DecisionTreeClassifier, Dict[str, object]]:
+    df = get_dataset()
+
+    # 1) coba load pkl dulu (kalau kompatibel)
+    model = try_load_embedded_model()
+
+    # 2) fallback: train ulang dari csv
     if model is None:
-        model = artifacts.model
+        X = df[FEATURE_COLS].values
+        y = df[TARGET_COL].values
 
-    return model, features, artifacts
-
-
-def make_tree_figure(model: DecisionTreeClassifier, features: List[str]):
-    plt, err = _optional_matplotlib()
-    if plt is None:
-        raise ModuleNotFoundError(
-            'matplotlib belum terpasang. Install dulu: pip install matplotlib. ' + f'Detail: {err}'
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.25, random_state=42, stratify=y
         )
-    fig = plt.figure(figsize=(16, 8))
-    plot_tree(
-        model,
-        feature_names=features,
-        class_names=["Tidak COVID", "COVID"],
-        filled=True,
-        rounded=True,
-        fontsize=9,
-    )
-    plt.tight_layout()
-    return fig
+
+        model = DecisionTreeClassifier(
+            criterion="gini",
+            max_depth=4,
+            min_samples_leaf=5,
+            random_state=42,
+        )
+        model.fit(X_train, y_train)
+
+        y_pred = model.predict(X_test)
+        acc = float((y_pred == y_test).mean())
+        rules = export_text(model, feature_names=FEATURE_COLS)
+        metrics = {
+            "accuracy": acc,
+            "rules": rules,
+            "used_pkl": False,
+        }
+    else:
+        rules = export_text(model, feature_names=FEATURE_COLS)
+        metrics = {
+            "accuracy": None,
+            "rules": rules,
+            "used_pkl": True,
+        }
+
+    return model, metrics
 
 
-def predict_one(model: DecisionTreeClassifier, features: List[str], x_dict: Dict[str, float]):
-    x = np.array([[float(x_dict[f]) for f in features]], dtype=float)
+def predict_one(model: DecisionTreeClassifier, x: np.ndarray) -> Tuple[int, float]:
     pred = int(model.predict(x)[0])
     proba = float(model.predict_proba(x)[0, 1])
     return pred, proba
 
 
+# -----------------------------
+# HALAMAN DETEKSI
+# -----------------------------
 
-def run_streamlit():
-    import streamlit as st
+if menu == "Deteksi":
+    try:
+        df = get_dataset()
+        model, metrics = get_model_and_metrics()
+    except Exception as e:
+        st.error(f"Aplikasi gagal memuat dataset/model: {e}")
+        st.stop()
 
-    st.set_page_config(page_title="Deteksi Gejala COVID-19", page_icon="🩺", layout="wide")
+    left, right = st.columns([1.1, 0.9], gap="large")
 
-    @st.cache_resource
-    def _load():
-        df_local = load_dataset()
-        model_local, features_local, artifacts_local = get_model_and_features(df_local)
-        return df_local, model_local, features_local, artifacts_local
+    with left:
+        st.subheader("Input Gejala")
 
-    df, model, features, artifacts = _load()
+        c1, c2 = st.columns(2)
+        with c1:
+            demam = st.selectbox("Demam", ["Tidak", "Ya"], index=0)
+            batuk = st.selectbox("Batuk", ["Tidak", "Ya"], index=0)
+            sesak = st.selectbox("Sesak Napas", ["Tidak", "Ya"], index=0)
+            tenggorokan = st.selectbox("Sakit Tenggorokan", ["Tidak", "Ya"], index=0)
+            lelah = st.selectbox("Kelelahan", ["Tidak", "Ya"], index=0)
 
-    st.sidebar.title("Navigasi")
-    menu = st.sidebar.radio("Pilih menu", ["Deteksi", "Tentang"], index=0)
+        with c2:
+            anosmia = st.selectbox("Anosmia (hilang penciuman)", ["Tidak", "Ya"], index=0)
+            diare = st.selectbox("Diare", ["Tidak", "Ya"], index=0)
+            kontak = st.selectbox("Kontak Erat", ["Tidak", "Ya"], index=0)
+            saturasi = st.number_input("Saturasi O2 (SpO2)", min_value=80, max_value=100, value=96, step=1)
 
-    st.sidebar.markdown("---")
-    st.sidebar.write("✅ Single file: dataset & model sudah tertanam.")
+        x = np.array([[
+            1 if demam == "Ya" else 0,
+            1 if batuk == "Ya" else 0,
+            1 if sesak == "Ya" else 0,
+            1 if tenggorokan == "Ya" else 0,
+            1 if lelah == "Ya" else 0,
+            1 if anosmia == "Ya" else 0,
+            1 if diare == "Ya" else 0,
+            1 if kontak == "Ya" else 0,
+            int(saturasi),
+        ]], dtype=float)
 
-    if menu == "Tentang":
-        st.title("Tentang Aplikasi")
-        st.write(
-            "Aplikasi ini menggunakan **Decision Tree** untuk memprediksi label COVID-19 "
-            "berdasarkan gejala. Dataset CSV dan model (opsional) sudah di-embed dalam file ini."
-        )
-        st.info("Catatan: hasil prediksi bukan diagnosis medis.")
-        st.subheader("Contoh data (5 baris)")
-        st.dataframe(df.head(), use_container_width=True)
-        return
-
-    st.title("Deteksi Gejala COVID-19 (Decision Tree)")
-    st.caption("Aplikasi edukasi: hasil prediksi bukan diagnosis medis.")
-
-    st.subheader("Input Gejala")
-    inputs: Dict[str, float] = {}
-
-    cols = st.columns(3)
-    for i, f in enumerate(features):
-        with cols[i % 3]:
-            if "saturasi" in f.lower() or "o2" in f.lower():
-                default_val = float(pd.to_numeric(df[f], errors="coerce").dropna().median())
-                val = st.slider(f"{f} (angka)", min_value=80, max_value=100, value=int(round(default_val)))
-                inputs[f] = float(val)
+        if st.button("🔍 Prediksi", type="primary"):
+            pred, proba = predict_one(model, x)
+            if pred == 1:
+                st.error(f"**Hasil: COVID (Positif)**\n\nProbabilitas: **{proba:.3f}**")
             else:
-                uniq = set(pd.to_numeric(df[f], errors="coerce").dropna().unique().tolist())
-                if uniq.issubset({0, 1}):
-                    opt = st.radio(f, ["Tidak", "Ya"], horizontal=True)
-                    inputs[f] = 1.0 if opt == "Ya" else 0.0
-                else:
-                    default_val = float(pd.to_numeric(df[f], errors="coerce").dropna().median())
-                    val = st.number_input(f"{f} (angka)", value=default_val)
-                    inputs[f] = float(val)
+                st.success(f"**Hasil: Tidak COVID (Negatif)**\n\nProbabilitas COVID: **{proba:.3f}**")
 
-    if st.button("🔍 Prediksi", type="primary"):
-        pred, proba = predict_one(model, features, inputs)
-        if pred == 1:
-            st.error(f"Prediksi: **COVID (Positif)**  | Probabilitas: **{proba:.3f}**")
+        st.markdown("---")
+        with st.expander("📄 Lihat Data (5 baris pertama)"):
+            st.dataframe(df.head(), use_container_width=True)
+
+    with right:
+        st.subheader("Info Model")
+        if metrics.get("accuracy") is not None:
+            st.metric("Akurasi (test split)", f"{metrics['accuracy']:.3f}")
         else:
-            st.success(f"Prediksi: **Tidak COVID (Negatif)** | Probabilitas COVID: **{proba:.3f}**")
+            if metrics.get("used_pkl"):
+                st.info("Model dimuat dari PKL. (Akurasi test split tidak dihitung ulang di Cloud.)")
+            else:
+                st.info("Model dibuat ulang dari dataset.")
 
-    with st.expander("📌 Metrik Model & Rules (Decision Tree)"):
-        st.write(f"Akurasi (test split): **{artifacts.accuracy:.3f}**")
-        st.write("Confusion Matrix (TN FP / FN TP):")
-        st.code(str(artifacts.cm))
-        st.text("Classification report:")
-        st.code(artifacts.report)
-        st.text("Rules (export_text):")
-        st.code(artifacts.rules)
+        with st.expander("🌳 Rules Decision Tree"):
+            st.code(metrics["rules"])
 
-    with st.expander("🌳 Diagram Decision Tree"):
-        try:
-            fig = make_tree_figure(model, features)
-            st.pyplot(fig, clear_figure=True)
-        except ModuleNotFoundError as e:
-            st.warning("Diagram butuh matplotlib. Install/deploy dengan menambahkan `matplotlib` ke requirements.\n\nDetail: " + str(e))
+        with st.expander("🖼️ Diagram Pohon (opsional)"):
+            try:
+                import matplotlib.pyplot as plt
+                from sklearn.tree import plot_tree
 
+                fig = plt.figure(figsize=(12, 6))
+                plot_tree(
+                    model,
+                    feature_names=FEATURE_COLS,
+                    class_names=["Tidak", "Ya"],
+                    filled=True,
+                    rounded=True,
+                    fontsize=8,
+                )
+                st.pyplot(fig, clear_figure=True)
+            except Exception as e:
+                st.warning(
+                    "Diagram membutuhkan matplotlib. Pastikan `matplotlib` ada di requirements.txt.\n"
+                    f"Detail: {e}"
+                )
 
-def main():
-    import sys
-    if not any("streamlit" in a.lower() for a in sys.argv):
-        print("File ini adalah Streamlit app.")
-        print("Jalankan dengan:")
-        print("  py -m streamlit run app_single.py")
-        return
+# -----------------------------
+# HALAMAN TENTANG
+# -----------------------------
+else:
+    st.subheader("Tentang Aplikasi")
+    st.write(
+        """
+Aplikasi ini dibuat untuk memenuhi tugas Decision Tree:
+- Menyusun tabel data gejala
+- Membuat model Decision Tree
+- Implementasi program Python
+- Implementasi UI di Streamlit
 
-    run_streamlit()
-
-
-if __name__ == "__main__":
-    main()
+Catatan:
+- Dataset pada contoh ini adalah data latihan/edukasi.
+- Hasil prediksi bukan pengganti diagnosis medis.
+"""
+    )
+    with st.expander("📌 Cara Jalankan Lokal (Windows)"):
+        st.code("py -m pip install streamlit scikit-learn pandas numpy matplotlib\npy -m streamlit run app.py")
