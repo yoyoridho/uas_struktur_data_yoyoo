@@ -1,11 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Streamlit App (Single File, Cloud-Ready)
-Deteksi Gejala COVID-19 menggunakan Decision Tree
-
-✅ Tidak butuh file CSV/PKL eksternal (semuanya sudah di-embed).
-✅ Aman untuk Streamlit Cloud (ada fallback kalau PKL tidak kompatibel).
-"""
 
 from __future__ import annotations
 
@@ -22,9 +14,7 @@ import streamlit as st
 from sklearn.model_selection import train_test_split
 from sklearn.tree import DecisionTreeClassifier, export_text
 
-# -----------------------------
-# DATA EMBED (CSV + PKL optional)
-# -----------------------------
+
 
 _EMBED_CSV_B64GZ = """H4sIADcVaWkC/4VWTU/rQAy897fswW6z2eTIe+WAiuAA4r5IEa9KP1Ab/j8h3W7GXpcnJEBTe9eeHY+77vZx7/7E4at3L9059k/xM57dS+y3w2t3+Pg4no59PLhNt+t28d/4393heN5vo1tv46lzm+NhiP39KQ5jzvB1iuft89I9xvdu9/f57WG9YMeO3OX3z09bO1pQAi8QuzaM4Bx5+TtG8uIakdP9lE6QnsBrTI5sBJjObKczjUh54hhZTekyNoMEHySQJdjkNuHMuihJdATpvmBJdUTIpwmS7t1D71eiR+ZZvdFUPC/mfi4fTG0SgNNFAYrP4CrzCQ8XgM980SqVxFgni3fn8t0VqJivLT5DikSe8plIc7sUfKaLWnh3oRC8iOdIlm1S5hMuqizNe4gkpK7QUpP5nFkdi2coiTGSZZuV6oj1GF5rTQJTxZskr0T6TeoARKITS2wNl2Jequ7Gc8DEyUgmsibWWy7AIp/1odBnXYhevQeVFgZgVXCX5lCPR9NatthYLHuhMLJmJrmAB+rJ4o4t6rPCgiWRAIRkha2EBwmvVGdWlrN4deYEcuGAjDOj+JSzDWuGbTGxJERGkhVJpfuzLEnxWVgtuj+QzKXoW2vzBVFneuJlZv5X2bAExTIuxNAWK4FxSzHOoXF7sKgL1uarLTGEYjZhHSIlTS1sUc274GmyBtLrtLFcwN+qibTCmgLMe4Yss/xv86ybp3lFs6WwG18lDFstBqmynOUn8hsysuReOwoAAA=="""
 _EMBED_PKL_B64GZ = """H4sIADcVaWkC/71Wa2wUVRTebbvdB23dAoVKiTxjKoSlQFGQym1tCZGJS4BaiIEMd2ennbHzYh5AjQ/A8KidgMJdlWgKMYb4SExVDBEFEcVXjJrURBQijY08FJAGiMYgeO50ZtndQqB/vD/2zD1zzj3fd865Z3ZdQSqW53OWXWa0SjzWlZip83yM5SRsGLxB7BENPCcaoqo0gr6easVmkdfJDnLPevIkqbTDnC6avA4WxC5oERWR2CFDk0QTlKBJ8IZJ7LCM17JJXjMFwhTYpbKosAaWNYk3WMeWMHl2NFMLWJoJ47fLqXINL7YIJtusY86EOP0v5/vcZRfRw5t5bFo6II7bJXRPbVhFTTqaIh0rSVVmDRObPGEm2WX0WFHWLMDeBsA4nccGn3mmkwA3MjBKYAkrHJ8EKhynsVjSBJxhXiyrimqqisixHPCN26UuHlbBMtCBaMQe9piakMRETLFkrY3VRA4yTuzSON3W6TpuW6pjTcvMbciwEg4QYgccL2IHlSSmtmBkBwwBa8AnvBGeVT1JE+6vh+ek2QZ6YbQwAazyFs4i7Vs2k8Wkksm3/U+QeDy+4Bos54dBJknYESxJ6hpWlrFG2u2KfoROHKAqtigyr5hsos2EbDJRK7EukOrzqJc5xjFO1fmYbEmm2A/PLmJ1nlMVw9QtznTQDmTA+DaSen+C9IPzUyJCvgf/9qC3r4A8BRp4GcsQ4kFIeiuxI0t4A7fGsYYhc9EluFU0G3mlpUXV1VYMfRpmeImXsECfg3WKasgiBu8GwA4ViTCqYuLWeTo26VG0jtgQF04nPMSLpUyPeYmS7jqnwEzYjiisapmaZRos7d6Qe41YIpT3l1SoEO4SxjB5QHScMF6YIEy088QskjU5JH0QVJi0RZhME198LXN57ed3ZarTgwY40qFvWqFCg4Oupu0mVNeH3EHgI5sACTR0xp1yqAXoYIDThmYPCvoL15xOB1rQcA5Rf5podZpEyMPvhUx1uAwYP00D9Q7DmIjQ68tyqqXAfCiF/nFuc06A0oxM5jfdW309lUJlvNKOSHyzyXKCKMHVHaI7c8TdBV160A6mACwFlWpD3lQgtL4OAncmEXtk/zjgk2zum6GyCINRaWFbVNZUWRqUmA7KRbkVFmYOrC/j20SExcIKJgRyCcgoyEbq2Xwrz3KwfERIMmNBNoFnJcilsK8CuYyeYE3LSsnAE2ZtIhZTC7cvmtlp+fDe66sCVwZ9masHnXWqeAI96mou0+3TTbWehVfffFeGMt3HNtXWVPVuH9ZxBE12VacmvNr5YntN2v9azrqa3feHcvt/irMCg/af5Mq6p6783dc7O+0fcGVRzt7jf2Fe3X2qdAxNdTUl59+uqv4wXuvhKXRlOCcPnv/RhuLgj30n0HjPvmLezrrttWn/YE7esvK3cmlt48T9Qw/Hv0WjXdUl9HPJ2gUzbpt/zTsvvIRf6UZenYZf+Vp4rSIyyPwdqhnlKlb1HFqfH6xK+0dcOcR3o9WDTnftH776yPvIy9O0s+z8EXsn33b8443ss1N//wJ5ed3tEBg5SPxdH3n+n31K15i0f7Erozl95uHvOlytzaj9GHl2pXu6Y78tut6/Ja684yb8Pz8+p+zy1qPI66stvTsLe7aPHnT/evXrnLPm/PEPLqL/OX81oaz7NzPtn6ryvkeFq7Fk3WB4w9TJ2+wN8GR6+BT2x/G7eQq78pmk+MO40DnUe2zv8r6D+1B2Pi+gbOnzrVg590DgZDfq/m7luH+LTqJlB+ZGmTd70OKNG06Ib/2CDs7+5+Tpl/9AgTtHJpc/9wn6acOUoxumfIkW7Lr00K5LZwac9+eqsmjRV3vQr69fnavuOI8eviBfjby3H/1VN3135xtnB+CJd1x8YNu+LpTaWldecuYc+ib47pCO579Ho67c/fj9+04NOP9W56XGuo9Wwo6y7neYXc3rhvPvOzAtVh2bTqxE7D9Tf5h52QsAAA=="""  # opsional, bisa gagal load jika versi sklearn beda
@@ -60,9 +50,7 @@ def try_load_embedded_model() -> DecisionTreeClassifier | None:
         return None
 
 
-# -----------------------------
-# KONFIG APLIKASI
-# -----------------------------
+
 
 st.set_page_config(
     page_title="Deteksi Gejala COVID-19 (Decision Tree)",
@@ -71,13 +59,10 @@ st.set_page_config(
 )
 
 st.title("🩺 Deteksi Gejala COVID-19 (Decision Tree)")
-st.caption("Aplikasi edukasi: hasil prediksi bukan diagnosis medis. Jika gejala berat, hubungi tenaga kesehatan.")
 
 menu = st.sidebar.radio("Navigasi", ["Deteksi", "Tentang"], index=0)
 
-# -----------------------------
-# TRAIN / LOAD MODEL (CACHE)
-# -----------------------------
+
 
 FEATURE_COLS = [
     "Demam",
@@ -106,10 +91,8 @@ def get_dataset() -> pd.DataFrame:
 def get_model_and_metrics() -> Tuple[DecisionTreeClassifier, Dict[str, object]]:
     df = get_dataset()
 
-    # 1) coba load pkl dulu (kalau kompatibel)
     model = try_load_embedded_model()
 
-    # 2) fallback: train ulang dari csv
     if model is None:
         X = df[FEATURE_COLS].values
         y = df[TARGET_COL].values
@@ -151,9 +134,6 @@ def predict_one(model: DecisionTreeClassifier, x: np.ndarray) -> Tuple[int, floa
     return pred, proba
 
 
-# -----------------------------
-# HALAMAN DETEKSI
-# -----------------------------
 
 if menu == "Deteksi":
     try:
@@ -239,9 +219,6 @@ if menu == "Deteksi":
                     f"Detail: {e}"
                 )
 
-# -----------------------------
-# HALAMAN TENTANG
-# -----------------------------
 else:
     st.subheader("Tentang Aplikasi")
     st.write(
@@ -254,8 +231,7 @@ Aplikasi ini dibuat untuk memenuhi tugas Decision Tree:
 
 Catatan:
 - Dataset pada contoh ini adalah data latihan/edukasi.
-- Hasil prediksi bukan pengganti diagnosis medis.
 """
     )
-    with st.expander("📌 Cara Jalankan Lokal (Windows)"):
+    with st.expander(""):
         st.code("py -m pip install streamlit scikit-learn pandas numpy matplotlib\npy -m streamlit run app.py")
