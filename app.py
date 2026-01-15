@@ -58,7 +58,7 @@ st.set_page_config(
     layout="wide",
 )
 
-st.title("🩺 Deteksi Gejala COVID-19 (Decision Tree)")
+st.title("")
 
 menu = st.sidebar.radio("Navigasi", ["Deteksi", "Tentang"], index=0)
 
@@ -215,22 +215,15 @@ if menu == "Deteksi":
                 st.pyplot(fig, clear_figure=True)
             except Exception as e:
                 st.warning(
-                    "Diagram membutuhkan matplotlib. Pastikan `matplotlib` ada di requirements.txt.\n"
+                    ".\n"
                     f"Detail: {e}"
                 )
 
 else:
-    st.subheader("Tentang Aplikasi")
+    st.subheader("")
     st.write(
         """
-Aplikasi ini dibuat untuk memenuhi tugas Decision Tree:
-- Menyusun tabel data gejala
-- Membuat model Decision Tree
-- Implementasi program Python
-- Implementasi UI di Streamlit
 
-Catatan:
-- Dataset pada contoh ini adalah data latihan/edukasi.
 """
     )
     with st.expander(""):
